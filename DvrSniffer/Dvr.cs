@@ -92,11 +92,11 @@ namespace DvrSniffer
             switch (packetType)
             {
                 case DvrPacketType.CameraInfo:
-                    return DvrCameraInfoPacket.FromData(_buffer, packetStart, packetLength);
+                    return DvrCameraInfoPacket.FromData(_buffer, packetStart);
                 case DvrPacketType.DeviceInformation:
-                    return DvrDeviceInformationPacket.FromData(_buffer, packetStart, packetLength);
+                    return DvrDeviceInformationPacket.FromData(_buffer, packetStart);
                 default:
-                    return DvrUnsupportedPacket.FromData(_buffer, packetStart, packetLength);
+                    return new DvrUnsupportedPacket(packetType);
             }
         }
 

@@ -11,26 +11,31 @@
 
         public override DvrPacketType PacketType => DvrPacketType.DeviceInformation;
 
-        public string SerialNumber => GetHexString(SerialNumberOffset, 6);
+        public string SerialNumber { get; }
 
-        public string DeviceName => GetString(DeviceNameOffset);
+        public string DeviceName { get; }
 
-        public string FirmwareVersion => GetString(FirmwareVersionOffset);
+        public string FirmwareVersion { get; }
 
-        public string KernelVersion => GetString(KernelVersionOffset);
+        public string KernelVersion { get; }
 
-        public string HardwareVersion => GetString(HardwareVersionOffset);
+        public string HardwareVersion { get; }
 
-        public string MCUVersion => GetString(MCUVersionOffset);
+        public string MCUVersion { get; }
 
-        private DvrDeviceInformationPacket(byte[] data, int offset, int length)
-            : base(data, offset, length)
+        private DvrDeviceInformationPacket(byte[] data, int offset)
         {
+            SerialNumber = GetHexString(data, SerialNumberOffset, 6);
+            DeviceName = GetString(data, DeviceNameOffset);
+            FirmwareVersion = GetString(data, FirmwareVersionOffset);
+            KernelVersion = GetString(data, KernelVersionOffset);
+            HardwareVersion = GetString(data, HardwareVersionOffset);
+            MCUVersion = GetString(data, MCUVersionOffset);
         }
 
-        internal static DvrDeviceInformationPacket FromData(byte[] data, int offset, int length)
+        internal static DvrDeviceInformationPacket FromData(byte[] data, int offset)
         {
-            return new DvrDeviceInformationPacket(data, offset, length);
+            return new DvrDeviceInformationPacket(data, offset);
         }
     }
 }

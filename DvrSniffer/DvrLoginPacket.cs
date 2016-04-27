@@ -40,7 +40,7 @@
         }
 
         public DvrLoginPacket()
-            : base(136)
+            : base(144)
         {
             // unknown bytes
             SetBytes(new byte[] { 0x18, 0x58, 0x2A, 0x15, 0x3E, 0x0A, 0x3C, 0x63, 0x78 }, 0x0C);

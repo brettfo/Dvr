@@ -10,24 +10,22 @@ namespace DvrSniffer
 
         public abstract DvrPacketType PacketType { get; }
 
-        protected DvrPacket(int dataSize)
+        protected DvrPacket()
         {
-            _data = new byte[dataSize + 8];
-            _data[0] = (byte)'1';
-            _data[1] = (byte)'1';
-            _data[2] = (byte)'1';
-            _data[3] = (byte)'1';
-            Array.Copy(BitConverter.GetBytes(dataSize), 0, _data, 4, 4); // set packet size (less 4 byte '1111' and 4 byte size)
-            Array.Copy(BitConverter.GetBytes((int)PacketType), 0, _data, 8, 4); // set packet type
         }
 
         /// <summary>
         /// Create a packet from received data.
         /// </summary>
-        protected DvrPacket(byte[] data, int offset, int length)
-            : this(length)
+        protected DvrPacket(int length)
         {
-            Array.Copy(data, offset, _data, 0, length);
+            _data = new byte[length];
+            _data[0] = (byte)'1';
+            _data[1] = (byte)'1';
+            _data[2] = (byte)'1';
+            _data[3] = (byte)'1';
+            Array.Copy(BitConverter.GetBytes(length - 8), 0, _data, 4, 4); // set packet size (less 4 byte '1111' and 4 byte size)
+            Array.Copy(BitConverter.GetBytes((int)PacketType), 0, _data, 8, 4); // set packet type
         }
 
         public void Send(Socket socket)
@@ -68,26 +66,36 @@ namespace DvrSniffer
 
         protected short GetShort(int offset)
         {
-            return BitConverter.ToInt16(_data, offset);
+            return GetShort(_data, offset);
+        }
+
+        protected static short GetShort(byte[] data, int offset)
+        {
+            return BitConverter.ToInt16(data, offset);
         }
 
         protected string GetString(int offset)
         {
+            return GetString(_data, offset);
+        }
+
+        protected static string GetString(byte[] data, int offset)
+        {
             var sb = new StringBuilder();
-            while (_data[offset] != 0)
+            while (data[offset] != 0)
             {
-                sb.Append((char)_data[offset++]);
+                sb.Append((char)data[offset++]);
             }
 
             return sb.ToString();
         }
 
-        protected string GetHexString(int offset, int length)
+        protected static string GetHexString(byte[] data, int offset, int length)
         {
             var sb = new StringBuilder();
             for (int i = 0; i < length; i++)
             {
-                sb.Append((((int)_data[offset + i])).ToString("X2"));
+                sb.Append((((int)data[offset + i])).ToString("X2"));
             }
 
             return sb.ToString();
