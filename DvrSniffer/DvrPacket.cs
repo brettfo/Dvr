@@ -64,9 +64,9 @@ namespace DvrSniffer
             _data[offset] = value;
         }
 
-        protected short GetShort(int offset)
+        protected void SetShort(short value, int offset)
         {
-            return GetShort(_data, offset);
+            Array.Copy(BitConverter.GetBytes(value), 0, _data, offset, 2);
         }
 
         protected static short GetShort(byte[] data, int offset)

@@ -8,9 +8,7 @@ namespace DvrSniffer
     public class Dvr
     {
         private Socket _socket;
-        private int _currentPos;
-        private int _lastRead;
-        private byte[] _buffer = new byte[4096];
+        private byte[] _headerBuffer = new byte[8];
 
         public DvrDeviceInformationPacket DeviceInformation { get; private set; }
 
@@ -67,43 +65,88 @@ namespace DvrSniffer
             }
         }
 
-        private DvrPacket ReadPacket()
+        public byte[] RequestVideo(short cameraNumber)
         {
-            if (_currentPos >= _lastRead - 8)
+            var data = new byte[1 * 1024 * 1024]; // only receive 1 meg for now
+            var offset = 0;
+            var packetCount = 0;
+            var request = new DvrRequestVideoDataPacket(cameraNumber);
+            request.Send(_socket);
+            var receive = true;
+            while (receive)
             {
-                ReadMoreData();
+                var packet = ReadPacket();
+                switch (packet?.PacketType)
+                {
+                    case DvrPacketType.VideoData:
+                        var videoData = (DvrVideoDataPacket)packet;
+                        if (offset + videoData.Data.Length > data.Length)
+                        {
+                            // this would overflow
+                            receive = false;
+                        }
+                        else
+                        {
+                            Array.Copy(videoData.Data, 0, data, offset, videoData.Data.Length);
+                            offset += videoData.Data.Length;
+                        }
+
+                        packetCount++;
+                        if (packetCount > 50)
+                        {
+                            receive = false;
+                        }
+                        break;
+                    default:
+                        //receive = offset > 512*1024; // only quit if we have 500k
+                        break;
+                }
             }
 
-            var packetStart = _currentPos;
-            Debug.Assert(_buffer[_currentPos++] == 0x31); // '1'
-            Debug.Assert(_buffer[_currentPos++] == 0x31); // '1'
-            Debug.Assert(_buffer[_currentPos++] == 0x31); // '1'
-            Debug.Assert(_buffer[_currentPos++] == 0x31); // '1'
+            return data;
+        }
 
-            var packetLength = BitConverter.ToInt32(_buffer, _currentPos);
-            _currentPos += 4;
+        private DvrPacket ReadPacket()
+        {
+        top:
+            var read = _socket.Receive(_headerBuffer);
+            if (read != 8)
+            {
+                return null;
+            }
+
+            if (_headerBuffer[0] != 0x31 ||
+                _headerBuffer[1] != 0x31 ||
+                _headerBuffer[2] != 0x31 ||
+                _headerBuffer[3] != 0x31)
+            {
+                return null;
+            }
+
+            var packetLength = BitConverter.ToInt32(_headerBuffer, 4);
             if (packetLength == 0)
             {
                 return null;
             }
 
-            var packetType = (DvrPacketType)BitConverter.ToInt32(_buffer, _currentPos);
-            _currentPos += packetLength;
+            var data = new byte[packetLength + 8];
+            Array.Copy(_headerBuffer, 0, data, 0, _headerBuffer.Length);
+            read = _socket.Receive(data, 8, packetLength, SocketFlags.None);
+
+            var packetType = (DvrPacketType)BitConverter.ToInt32(data, 8);
             switch (packetType)
             {
                 case DvrPacketType.CameraInfo:
-                    return DvrCameraInfoPacket.FromData(_buffer, packetStart);
+                    return DvrCameraInfoPacket.FromData(data);
                 case DvrPacketType.DeviceInformation:
-                    return DvrDeviceInformationPacket.FromData(_buffer, packetStart);
+                    return DvrDeviceInformationPacket.FromData(data);
+                case DvrPacketType.VideoData:
+                    var packet = DvrVideoDataPacket.FromData(data, 8, packetLength);
+                    if (packet == null) goto top;
+                    return packet;
                 default:
                     return new DvrUnsupportedPacket(packetType);
             }
-        }
-
-        private void ReadMoreData()
-        {
-            _lastRead = _socket.Receive(_buffer);
-            _currentPos = 0;
         }
 
         public void Close()

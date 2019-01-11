@@ -41,7 +41,10 @@ namespace DvrSniffer
                 Console.WriteLine("    " + camera);
             }
 
+            var data = dvr.RequestVideo(0);
             dvr.Close();
+
+            File.WriteAllBytes(@"C:\Users\Brett\Desktop\vid.raw", data);
         }
     }
 }

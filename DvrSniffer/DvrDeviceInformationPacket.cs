@@ -23,7 +23,7 @@
 
         public string MCUVersion { get; }
 
-        private DvrDeviceInformationPacket(byte[] data, int offset)
+        private DvrDeviceInformationPacket(byte[] data)
         {
             SerialNumber = GetHexString(data, SerialNumberOffset, 6);
             DeviceName = GetString(data, DeviceNameOffset);
@@ -33,9 +33,9 @@
             MCUVersion = GetString(data, MCUVersionOffset);
         }
 
-        internal static DvrDeviceInformationPacket FromData(byte[] data, int offset)
+        internal static DvrDeviceInformationPacket FromData(byte[] data)
         {
-            return new DvrDeviceInformationPacket(data, offset);
+            return new DvrDeviceInformationPacket(data);
         }
     }
 }

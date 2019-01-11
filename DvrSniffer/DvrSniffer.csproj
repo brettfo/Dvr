@@ -46,7 +46,9 @@
     <Compile Include="DvrCameraInfoPacket.cs" />
     <Compile Include="DvrDeviceInformationPacket.cs" />
     <Compile Include="DvrLoginPacket.cs" />
+    <Compile Include="DvrRequestVideoDataPacket.cs" />
     <Compile Include="DvrUnsupportedPacket.cs" />
+    <Compile Include="DvrVideoDataPacket.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Dvr.cs" />
