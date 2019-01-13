@@ -1,12 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DvrSniffer
 {
     class Program
     {
         static void Main(string[] args)
+        {
+            MainAsync(args).Wait();
+        }
+
+        static async Task MainAsync(string[] args)
         {
             var ip = "192.168.0.98";
             var port = 6036;
@@ -25,7 +33,7 @@ namespace DvrSniffer
             }
 
             var dvr = new Dvr();
-            dvr.Connect(IPAddress.Parse(ip), port, user, password);
+            await dvr.Connect(IPAddress.Parse(ip), port, user, password);
 
             Console.WriteLine("Connected to DVR:");
             Console.WriteLine($"    Device name:      {dvr.DeviceInformation.DeviceName}");
@@ -41,10 +49,22 @@ namespace DvrSniffer
                 Console.WriteLine("    " + camera);
             }
 
-            var data = dvr.RequestVideo(0);
-            dvr.Close();
+            var data = new List<byte>();
+            var dataDone = new ManualResetEvent(false);
+            dvr.OnVideoFrame += (sender, dataFrame) =>
+            {
+                Console.WriteLine($"got video data frame of type {dataFrame.FrameType}");
+                data.AddRange(dataFrame.Data);
+                if (dataFrame.FrameType == FrameType.IFrame)
+                {
+                    dataDone.Set();
+                }
+            };
+            dvr.StartListen();
+            await dvr.RequestVideo(1);
 
-            File.WriteAllBytes(@"C:\Users\Brett\Desktop\vid.raw", data);
+            dataDone.WaitOne(TimeSpan.FromSeconds(2));
+            File.WriteAllBytes(@"C:\Users\Brett\Desktop\vid.raw", data.ToArray());
         }
     }
 }

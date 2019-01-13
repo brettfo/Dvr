@@ -2,9 +2,13 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DvrSniffer
 {
+    public delegate void VideoDataFrameEvent(object sender, VideoDataFrame dataFrame);
+
     public class Dvr
     {
         private Socket _socket;
@@ -14,11 +18,13 @@ namespace DvrSniffer
 
         public DvrCameraInfoPacket CameraInfo { get; private set; }
 
+        public event VideoDataFrameEvent OnVideoFrame;
+
         public Dvr()
         {
         }
 
-        public void Connect(IPAddress ip, int port, string username, string password)
+        public async Task Connect(IPAddress ip, int port, string username, string password)
         {
             if (_socket != null)
             {
@@ -43,12 +49,12 @@ namespace DvrSniffer
             loginPacket.UserName = username;
             loginPacket.Password = password;
             loginPacket.MachineName = Environment.MachineName.ToLower();
-            loginPacket.Send(_socket);
+            await loginPacket.SendAsync(_socket);
 
             var receive = true;
             while (receive)
             {
-                var packet = ReadPacket();
+                var packet = await ReadPacket();
                 switch (packet?.PacketType)
                 {
                     case DvrPacketType.CameraInfo:
@@ -65,51 +71,46 @@ namespace DvrSniffer
             }
         }
 
-        public byte[] RequestVideo(short cameraNumber)
+        public async Task RequestVideo(short cameraNumber)
         {
-            var data = new byte[1 * 1024 * 1024]; // only receive 1 meg for now
-            var offset = 0;
-            var packetCount = 0;
             var request = new DvrRequestVideoDataPacket(cameraNumber);
-            request.Send(_socket);
-            var receive = true;
-            while (receive)
+            await request.SendAsync(_socket);
+        }
+
+        public void StartListen()
+        {
+            Task.Run(ListenLoop);
+        }
+
+        private async Task ListenLoop()
+        {
+            while (true)
             {
-                var packet = ReadPacket();
+                var packet = await ReadPacket();
                 switch (packet?.PacketType)
                 {
                     case DvrPacketType.VideoData:
                         var videoData = (DvrVideoDataPacket)packet;
-                        if (offset + videoData.Data.Length > data.Length)
-                        {
-                            // this would overflow
-                            receive = false;
-                        }
-                        else
-                        {
-                            Array.Copy(videoData.Data, 0, data, offset, videoData.Data.Length);
-                            offset += videoData.Data.Length;
-                        }
-
-                        packetCount++;
-                        if (packetCount > 50)
-                        {
-                            receive = false;
-                        }
+                        ProcessVideoPacket(videoData);
                         break;
                     default:
-                        //receive = offset > 512*1024; // only quit if we have 500k
                         break;
                 }
             }
-
-            return data;
         }
 
-        private DvrPacket ReadPacket()
+        private void ProcessVideoPacket(DvrVideoDataPacket videoDataPacket)
+        {
+            foreach (var videoDataFrame in videoDataPacket.VideoDataFrames)
+            {
+                OnVideoFrame?.Invoke(this, videoDataFrame);
+            }
+        }
+
+        private async Task<DvrPacket> ReadPacket()
         {
         top:
-            var read = _socket.Receive(_headerBuffer);
+            var read = await _socket.ReceiveAsync(_headerBuffer, SocketFlags.None);
             if (read != 8)
             {
                 return null;
@@ -141,7 +142,7 @@ namespace DvrSniffer
                 case DvrPacketType.DeviceInformation:
                     return DvrDeviceInformationPacket.FromData(data);
                 case DvrPacketType.VideoData:
-                    var packet = DvrVideoDataPacket.FromData(data, 8, packetLength);
+                    var packet = DvrVideoDataPacket.FromData(data);
                     if (packet == null) goto top;
                     return packet;
                 default:

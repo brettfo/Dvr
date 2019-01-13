@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace DvrSniffer
 {
@@ -28,9 +29,9 @@ namespace DvrSniffer
             Array.Copy(BitConverter.GetBytes((int)PacketType), 0, _data, 8, 4); // set packet type
         }
 
-        public void Send(Socket socket)
+        public Task<int> SendAsync(Socket socket)
         {
-            socket.Send(_data, _data.Length, SocketFlags.None);
+            return socket.SendAsync(_data, SocketFlags.None);
         }
 
         protected void ClearBytes(int offset, int length)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace DvrSniffer
 {
@@ -11,32 +12,66 @@ namespace DvrSniffer
         PSFrame = 0x61,
     }
 
+    public class VideoDataFrame
+    {
+        public short CameraNumber { get; }
+        public FrameType FrameType { get; }
+        public byte[] Data { get; }
+
+        public VideoDataFrame(short cameraNumber, FrameType frameType, byte[] data)
+        {
+            CameraNumber = cameraNumber;
+            FrameType = frameType;
+            Data = data;
+        }
+    }
+
     public class DvrVideoDataPacket : DvrPacket
     {
         public override DvrPacketType PacketType => DvrPacketType.VideoData;
 
-        public FrameType FrameType { get; }
         public byte[] Data { get; }
 
-        private DvrVideoDataPacket(FrameType frameType, byte[] data, int offset, int length)
+        public List<VideoDataFrame> VideoDataFrames { get; }
+
+        private DvrVideoDataPacket(byte[] data, List<VideoDataFrame> videoDataFrames)
         {
-            FrameType = frameType;
-            Data = new byte[length];
-            Array.Copy(data, offset, Data, 0, length);
+            Data = data;
+            VideoDataFrames = videoDataFrames;
         }
 
-        public static DvrVideoDataPacket FromData(byte[] data, int offset, int length)
+        public static DvrVideoDataPacket FromData(byte[] data)
         {
-            //Console.WriteLine("new video data packet");
-            // TODO: the output contains some h.264 values:
-            // "00 00 00 01 65" iframe
-            // "00 00 00 01 67" SPS frame
-            // "00 00 00 01 68" PPS frame
-            // "00 00 00 01 61" PS frame
-            //var bytesToTrim = 24; // 8 for the 'ff ff ff ff 00 00 00 00' and 24 for the next line that seems to have a pattern
+            var lastDataFrameStart = -1;
+            var dataFrameOffsets = new List<(int, FrameType)>();
+            while (TryFindNextVideoDataFrame(data, lastDataFrameStart + 1, out var dataFrameStart, out var frameType))
+            {
+                dataFrameOffsets.Add((dataFrameStart, frameType));
+                lastDataFrameStart = dataFrameStart;
+            }
 
-            // look for 00 00 00 01 6x
-            for (int i = 0; i < data.Length - 5; i++)
+            var dataFrames = new List<VideoDataFrame>();
+            for (int i = 0; i < dataFrameOffsets.Count; i++)
+            {
+                (var frameStart, var frameType) = dataFrameOffsets[i];
+                var nextFrameStart = i == dataFrameOffsets.Count - 1
+                    ? data.Length
+                    : dataFrameOffsets[i + 1].Item1;
+                var frameLength = nextFrameStart - frameStart;
+                var frameData = new byte[frameLength];
+                Array.Copy(data, frameStart, frameData, 0, frameLength);
+                var dataFrame = new VideoDataFrame(-1, frameType, frameData);
+                dataFrames.Add(dataFrame);
+            }
+
+            return new DvrVideoDataPacket(data, dataFrames);
+        }
+
+        private static bool TryFindNextVideoDataFrame(byte[] data, int startOffset, out int nextDataFrameStart, out FrameType frameType)
+        {
+            nextDataFrameStart = default(int);
+            frameType = default(FrameType);
+            for (int i = startOffset; i < data.Length - 5; i++)
             {
                 if (data[i] == 0x00 &&
                     data[i + 1] == 0x00 &&
@@ -45,35 +80,13 @@ namespace DvrSniffer
                     data[i + 4] >= 0x60 &&
                     data[i + 4] <= 0x6F)
                 {
-                    if (Enum.IsDefined(typeof(FrameType), data[i + 4]))
-                    {
-                        var frameType = (FrameType)data[i + 4];
-                        Console.WriteLine($"Found frame type {frameType} at offset {i}.");
-                    }
+                    nextDataFrameStart = i;
+                    frameType = (FrameType)data[i + 4];
+                    return true;
                 }
             }
 
-            // look for 00 00 00 01 6x
-            for (int i = 0; i < data.Length - 5; i++)
-            {
-                if (data[i] == 0x00 &&
-                    data[i + 1] == 0x00 &&
-                    data[i + 2] == 0x00 &&
-                    data[i + 3] == 0x01 &&
-                    data[i + 4] >= 0x60 &&
-                    data[i + 4] <= 0x6F)
-                {
-                    var frameType = FrameType.Unknown;
-                    if (Enum.IsDefined(typeof(FrameType), data[i + 4]))
-                    {
-                        frameType = (FrameType)data[i + 4];
-                    }
-
-                    return new DvrVideoDataPacket(frameType, data, i, data.Length - i);
-                }
-            }
-
-            return null;
+            return false;
         }
     }
 }
